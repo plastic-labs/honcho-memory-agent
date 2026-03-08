@@ -20,8 +20,8 @@ This script is a thin wrapper that adds:
   - HTTP API proxying to Honcho SDK calls
 
 Usage:
-    python always_on_memory_agent.py
-    python always_on_memory_agent.py --watch ./docs --port 9000 --peer alice
+    python agent.py
+    python agent.py --watch ./docs --port 9000 --peer alice
 
 Endpoints:
     GET  /query?q=         -> peer.chat()          (Dialectic)
@@ -53,8 +53,11 @@ from pathlib import Path
 
 import anthropic
 from aiohttp import web
+from dotenv import load_dotenv
 
 from honcho import Honcho
+
+load_dotenv()
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
@@ -106,6 +109,16 @@ MIME_MAP: dict[str, str] = {
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="[%H:%M]")
 log = logging.getLogger("honcho-memory-agent")
+
+# Module-level Anthropic client — instantiated once, reused across all image calls.
+_anthropic_client: anthropic.AsyncAnthropic | None = None
+
+
+def get_anthropic_client() -> anthropic.AsyncAnthropic:
+    global _anthropic_client
+    if _anthropic_client is None:
+        _anthropic_client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+    return _anthropic_client
 
 
 # ── Attribution ────────────────────────────────────────────────────────────────
@@ -210,7 +223,7 @@ async def _describe_image(
         "relevant details. Prioritize facts over interpretation."
     )
 
-    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+    client = get_anthropic_client()
     response = await client.messages.create(
         model=MEDIA_MODEL,
         max_tokens=1024,
@@ -371,6 +384,9 @@ class HonchoMemoryAgent:
 
 # ── File Watcher ───────────────────────────────────────────────────────────────
 
+# Tracks files ingested in this process lifetime. Not persisted across restarts —
+# files dropped while the agent is down will be re-ingested on next startup.
+# For persistence, query Honcho message metadata for existing source_file entries.
 _processed: set[str] = set()
 
 
@@ -398,10 +414,9 @@ async def watch_folder(
                 peer_id, session_id, context = resolve_attribution(f, default_peer)
                 try:
                     await agent.ingest_file(f, peer_id=peer_id, session_id=session_id, context=context)
+                    _processed.add(str(f))
                 except Exception as exc:
-                    log.error("error ingesting %s: %s", f.name, exc)
-
-                _processed.add(str(f))
+                    log.error("error ingesting %s: %s — will retry next poll", f.name, exc)
 
         except Exception as exc:
             log.error("watch error: %s", exc)
