@@ -33,7 +33,7 @@ Endpoints:
 
 Environment:
     HONCHO_API_KEY          API key (required for hosted; omit for local)
-    HONCHO_ENV              "demo" | "local" | custom base URL (default: demo)
+    HONCHO_ENV              "local" | "production" (default: production)
     HONCHO_WORKSPACE_ID     workspace slug (default: always-on-agent)
     HONCHO_DEFAULT_PEER     default peer ID when none resolved (default: user)
     ANTHROPIC_API_KEY       for image description preprocessing
@@ -61,7 +61,7 @@ load_dotenv()
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-HONCHO_ENV = os.getenv("HONCHO_ENV", "demo")
+HONCHO_ENV = os.getenv("HONCHO_ENV", "production")
 HONCHO_API_KEY = os.getenv("HONCHO_API_KEY", "")
 WORKSPACE_ID = os.getenv("HONCHO_WORKSPACE_ID", "always-on-agent")
 DEFAULT_PEER_ID = os.getenv("HONCHO_DEFAULT_PEER", "user")
